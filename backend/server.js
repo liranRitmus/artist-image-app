@@ -75,12 +75,14 @@ app.post('/api/credits', async (req, res) => {
       });
     }
 
-    // Check if credit already exists
-    const exists = await Credit.findOne({ url, attribution });
-    if (exists) {
-      return res.status(400).json({ 
+    // Check if artist already exists
+    const existingArtist = await Credit.findOne({ query });
+    if (existingArtist) {
+      return res.status(200).json({ 
         success: false,
-        message: 'This image is already in your credits' 
+        message: 'Artist already exists',
+        existing: true,
+        existingId: existingArtist._id
       });
     }
 

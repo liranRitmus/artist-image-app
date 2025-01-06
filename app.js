@@ -186,7 +186,49 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const data = await response.json();
         
-        if (response.ok) {
+        if (data.existing) {
+          // Ask user if they want to replace existing image
+          const shouldReplace = confirm('This artist already exists. Do you want to replace the image?');
+          if (shouldReplace) {
+            // Delete existing credit
+            const deleteResponse = await fetch(`/api/credits/${data.existingId}`, {
+              method: 'DELETE'
+            });
+            
+            if (deleteResponse.ok) {
+              // Add new credit
+              const addResponse = await fetch('/api/credits', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  artist: button.dataset.artist,
+                  attribution: attribution,
+                  url: url,
+                  thumbnail: button.closest('.image-item').querySelector('img').src,
+                  query: button.dataset.artist,
+                  license_url: button.dataset.licenseUrl
+                })
+              });
+              
+              const addData = await addResponse.json();
+              if (addResponse.ok) {
+                const notification = document.createElement('div');
+                notification.className = 'notification';
+                notification.textContent = 'Image replaced successfully!';
+                document.body.appendChild(notification);
+                setTimeout(() => {
+                  notification.remove();
+                }, 3000);
+              } else {
+                throw new Error(addData.message || 'Error replacing image');
+              }
+            } else {
+              throw new Error('Error deleting existing image');
+            }
+          }
+        } else if (response.ok) {
           // Show success notification
           const notification = document.createElement('div');
           notification.className = 'notification';

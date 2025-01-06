@@ -33,7 +33,7 @@
       const creditsList = document.getElementById('creditsList');
       
       try {
-        const response = await fetch('http://localhost:3001/api/credits');
+        const response = await fetch('/api/credits');
         const credits = await response.json();
 
         if (credits.length === 0) {
@@ -64,7 +64,7 @@
         const creditId = e.target.dataset.id;
         
         try {
-          const response = await fetch(`http://localhost:3001/api/credits/${creditId}`, {
+          const response = await fetch(`/api/credits/${creditId}`, {
             method: 'DELETE'
           });
 

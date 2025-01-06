@@ -28,6 +28,10 @@
       "dest": "backend/server.js"
     },
     {
+      "src": "/app.js",
+      "dest": "app.js"
+    },
+    {
       "src": "/(.*)",
       "dest": "index.html"
     }

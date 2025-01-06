@@ -1,8 +1,25 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
+const bcrypt = require('bcrypt');
 
 const app = express();
+const SALT_ROUNDS = 12;
+
+// Password Schema
+const passwordSchema = new mongoose.Schema({
+  hash: String
+});
+const Password = mongoose.model('Password', passwordSchema);
+
+// Initialize password if not exists
+async function initializePassword() {
+  const existingPassword = await Password.findOne();
+  if (!existingPassword) {
+    const hash = await bcrypt.hash('OP748748!', SALT_ROUNDS);
+    await Password.create({ hash });
+  }
+}
 
 // Debug environment variables
 console.log('Environment Variables:');
@@ -140,6 +157,46 @@ app.delete('/api/credits/:id', async (req, res) => {
       error: error.message 
     });
   }
+});
+
+// Password verification endpoint
+app.post('/api/verify-password', async (req, res) => {
+  try {
+    const { password } = req.body;
+    if (!password) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Password is required'
+      });
+    }
+
+    const storedPassword = await Password.findOne();
+    if (!storedPassword) {
+      return res.status(500).json({ 
+        success: false,
+        message: 'Password not configured'
+      });
+    }
+
+    const isMatch = await bcrypt.compare(password, storedPassword.hash);
+    res.json({
+      success: isMatch,
+      message: isMatch ? 'Password verified' : 'Incorrect password'
+    });
+  } catch (error) {
+    console.error('Error verifying password:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Error verifying password'
+    });
+  }
+});
+
+// Initialize password and start server
+const PORT = process.env.PORT || 3001;
+app.listen(PORT, async () => {
+  await initializePassword();
+  console.log(`Server running on port ${PORT}`);
 });
 
 // Export the app for Vercel

@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Welcome</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    .password-container {
+      max-width: 400px;
+      margin: 100px auto;
+      padding: 20px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      text-align: center;
+    }
+    .password-input {
+      width: 100%;
+      padding: 10px;
+      margin: 10px 0;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+    .submit-button {
+      background-color: #4CAF50;
+      color: white;
+      padding: 10px 20px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .error-message {
+      color: red;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="password-container">
+    <h1>Welcome</h1>
+    <p>Please enter the password to continue:</p>
+    <input type="password" id="passwordInput" class="password-input" placeholder="Enter password">
+    <button id="submitButton" class="submit-button">Submit</button>
+    <div id="errorMessage" class="error-message"></div>
+  </div>
+
+  <script>
+    document.getElementById('submitButton').addEventListener('click', async () => {
+      const password = document.getElementById('passwordInput').value;
+      const errorMessage = document.getElementById('errorMessage');
+      
+      try {
+        const response = await fetch('/api/verify-password', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ password })
+        });
+
+        const data = await response.json();
+        
+        if (data.success) {
+          sessionStorage.setItem('authenticated', 'true');
+          window.location.href = 'index.html';
+        } else {
+          errorMessage.textContent = data.message || 'Incorrect password';
+        }
+      } catch (error) {
+        errorMessage.textContent = 'Error verifying password';
+      }
+    });
+  </script>
+</body>
+</html>

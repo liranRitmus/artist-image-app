@@ -194,9 +194,17 @@ app.post('/api/verify-password', async (req, res) => {
 
 // Initialize password and start server
 const PORT = process.env.PORT || 3001;
-app.listen(PORT, async () => {
-  await initializePassword();
-  console.log(`Server running on port ${PORT}`);
+mongoose.connection.once('open', async () => {
+  try {
+    await initializePassword();
+    console.log('Password initialized');
+    app.listen(PORT, () => {
+      console.log(`Server running on port ${PORT}`);
+    });
+  } catch (error) {
+    console.error('Failed to initialize password:', error);
+    process.exit(1);
+  }
 });
 
 // Export the app for Vercel

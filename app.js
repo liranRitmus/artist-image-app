@@ -169,7 +169,7 @@ document.addEventListener('DOMContentLoaded', () => {
       
       // Save to credits via API
       try {
-        const response = await fetch('/api/credits', {
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/api'}/credits`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

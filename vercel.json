@@ -32,6 +32,10 @@
       "dest": "app.js"
     },
     {
+      "src": "/(.*\\.(js|css|jpg|html))",
+      "dest": "$1"
+    },
+    {
       "src": "/(.*)",
       "dest": "index.html"
     }

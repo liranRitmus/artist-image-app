@@ -170,13 +170,15 @@ app.post('/api/verify-password', async (req, res) => {
       });
     }
 
-    const storedPassword = await Password.findOne();
+    const storedPassword = await Password.findOne().exec();
     if (!storedPassword) {
+      console.error('No password found in database');
       return res.status(500).json({ 
         success: false,
         message: 'Password not configured'
       });
     }
+    console.log('Found stored password hash');
 
     const isMatch = await bcrypt.compare(password, storedPassword.hash);
     res.json({
@@ -208,4 +210,3 @@ mongoose.connection.once('open', async () => {
 });
 
 // Export the app for Vercel
-module.exports = app;

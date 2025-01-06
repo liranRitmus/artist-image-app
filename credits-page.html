@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Credits Page</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <nav class="top-nav">
+    <a href="index.html" class="nav-button">Search</a>
+    <a href="credits.html" class="nav-button">Current Credits</a>
+    <a href="credits-page.html" class="nav-button active">Credits Page</a>
+  </nav>
+  <div class="container">
+    <h1>Mobile Preview</h1>
+    <div class="mobile-preview">
+      <div class="mobile-screen">
+        <div id="mobileCreditsList"></div>
+      </div>
+    </div>
+  </div>
+  <script>
+    document.addEventListener('DOMContentLoaded', async () => {
+      const creditsList = document.getElementById('mobileCreditsList');
+      
+      try {
+        const response = await fetch('http://localhost:3001/api/credits');
+        const credits = await response.json();
+
+        if (credits.length === 0) {
+          creditsList.innerHTML = '<p class="no-credits">No credits saved yet</p>';
+          return;
+        }
+
+        creditsList.innerHTML = credits
+          .map(credit => `
+            <div class="mobile-attribution">
+              <p><a href="${credit.url}" target="_blank">${credit.attribution.split(' by ')[0]}</a> by ${credit.attribution.split(' by ')[1]}</p>
+            </div>
+          `)
+          .join('');
+      } catch (error) {
+        creditsList.innerHTML = '<p class="no-credits">Error loading credits</p>';
+        console.error('Error fetching credits:', error);
+      }
+    });
+  </script>
+</body>
+</html>

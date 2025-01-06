@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Credits</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <nav class="top-nav">
+    <a href="index.html" class="nav-button">Search</a>
+    <a href="credits.html" class="nav-button active">Current Credits</a>
+    <a href="credits-page.html" class="nav-button">Credits Page</a>
+  </nav>
+  <div class="container">
+    <h1>Current Credits</h1>
+    <table id="creditsTable">
+      <thead>
+        <tr>
+          <th>Artist</th>
+          <th>Thumbnail</th>
+          <th>URL</th>
+          <th>Attribution</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody id="creditsList"></tbody>
+    </table>
+    <a href="index.html" class="back-button">Back to Search</a>
+  </div>
+  <script>
+    document.addEventListener('DOMContentLoaded', async () => {
+      const creditsList = document.getElementById('creditsList');
+      
+      try {
+        const response = await fetch('http://localhost:3001/api/credits');
+        const credits = await response.json();
+
+        if (credits.length === 0) {
+          creditsList.innerHTML = '<p>No credits saved yet.</p>';
+          return;
+        }
+
+        creditsList.innerHTML = credits
+          .map(credit => `
+            <tr class="credit-item">
+              <td>${credit.query}</td>
+              <td><img src="${credit.thumbnail}" alt="Thumbnail" class="credit-thumbnail"></td>
+              <td><a href="${credit.url}" target="_blank" class="image-url">View Image</a></td>
+              <td>${credit.attribution.replace('To view a copy of this license, visit', 'To view a copy of this license, visit <a href="${credit.license_url}">here</a>')}</td>
+              <td><button class="delete-button" data-id="${credit._id}">Delete</button></td>
+            </tr>
+          `)
+          .join('');
+      } catch (error) {
+        creditsList.innerHTML = '<p>Error loading credits. Please try again later.</p>';
+        console.error('Error fetching credits:', error);
+      }
+    });
+
+    // Handle delete button clicks
+    document.addEventListener('click', async (e) => {
+      if (e.target.classList.contains('delete-button')) {
+        const creditId = e.target.dataset.id;
+        
+        try {
+          const response = await fetch(`http://localhost:3001/api/credits/${creditId}`, {
+            method: 'DELETE'
+          });
+
+          if (response.ok) {
+            location.reload(); // Refresh to show updated list
+          } else {
+            alert('Failed to delete credit. Please try again.');
+          }
+        } catch (error) {
+          console.error('Error deleting credit:', error);
+          alert('Error deleting credit. Please try again.');
+        }
+      }
+    });
+  </script>
+</body>
+</html>

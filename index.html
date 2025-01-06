@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Openverse Artist Image Finder</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <nav class="top-nav">
+    <a href="index.html" class="nav-button active">Search</a>
+    <a href="credits.html" class="nav-button">Current Credits</a>
+    <a href="credits-page.html" class="nav-button">Credits Page</a>
+  </nav>
+  <div class="container">
+    <h1>Openverse Artist Image Finder</h1>
+    <div class="search-container">
+      <textarea id="searchInput" placeholder="Enter artist names, one per line...">Jon Bon Jovi
+Adele
+BTS Music</textarea>
+      <button id="searchButton">Search</button>
+      <button id="exportButton">Export CSV</button>
+    </div>
+    <div id="imageContainer"></div>
+    <div id="attributionContainer"></div>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>

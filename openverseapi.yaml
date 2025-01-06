@@ -1,0 +1,26 @@
+
+# Register for a key
+curl \
+  -X POST \
+  -H "Content-Type: application/json" \
+  -d '{"name": "My amazing project-llr", "description": "To access Openverse API", "email": "liran@productvoyager.com"}' \
+  "https://api.openverse.org/v1/auth_tokens/register/"
+
+
+
+{"client_id":"cMfBTwcNPPg8aQqA4bEUnjSNjiTOUzvzpZ8PYeDd","client_secret":"WPDlNmtQRbf8BbL7s5E9Nh87fFgltgRhYZc2enoz8MpfreUl75JCaB3N0okbAb1nDnbqPwxbCFQJKObEOD8oc98W393PkGVsm7dnXXHyYEXZmcPXVDz0t9hAVOLSeF0X","name":"My amazing project-llr","msg":"Check your email for a verification link."}%                                  lirangabai@Mac ~ % 
+
+
+
+HTTP 200 OK
+Allow: GET, HEAD, OPTIONS
+Content-Type: application/json
+Vary: Accept
+X-RateLimit-Available-anon_burst: 19
+X-RateLimit-Available-anon_sustained: 199
+X-RateLimit-Limit-anon_burst: 20/min
+X-RateLimit-Limit-anon_sustained: 200/day
+
+{
+    "msg": "Successfully verified email. Your OAuth2 credentials are now active."
+}

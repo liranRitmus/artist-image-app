@@ -1,19 +1,51 @@
-require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 
 const app = express();
-const port = process.env.PORT || 3001;
+
+// Debug environment variables
+console.log('Environment Variables:');
+console.log('MONGODB_URI:', process.env.MONGODB_URI);
+console.log('PORT:', process.env.PORT);
 
 // Middleware
-app.use(cors());
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+  next();
+});
 app.use(express.json());
 
 // MongoDB Connection
-mongoose.connect(process.env.MONGODB_URI)
-  .then(() => console.log('Connected to MongoDB'))
-  .catch(err => console.error('MongoDB connection error:', err));
+mongoose.connect(process.env.MONGODB_URI, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+  retryWrites: true,
+  w: 'majority'
+})
+.then(() => console.log('Successfully connected to MongoDB'))
+.catch(err => {
+  console.error('MongoDB connection error:', err);
+  process.exit(1);
+});
+
+// Handle MongoDB connection events
+mongoose.connection.on('connected', () => {
+  console.log('Mongoose connected to DB');
+});
+
+mongoose.connection.on('error', (err) => {
+  console.error('Mongoose connection error:', err);
+});
+
+mongoose.connection.on('disconnected', () => {
+  console.log('Mongoose disconnected from DB');
+});
 
 // Credit Schema
 const creditSchema = new mongoose.Schema({
@@ -22,6 +54,7 @@ const creditSchema = new mongoose.Schema({
   url: String,
   thumbnail: String,
   query: String,
+  license_url: String,
   createdAt: { type: Date, default: Date.now }
 });
 
@@ -31,19 +64,39 @@ const Credit = mongoose.model('Credit', creditSchema, 'credits');
 // Add credit
 app.post('/api/credits', async (req, res) => {
   try {
-    const { artist, attribution, url, thumbnail, query } = req.body;
+    const { artist, attribution, url, thumbnail, query, license_url } = req.body;
     
+    // Validate required fields
+    if (!artist || !attribution || !url) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Artist, attribution, and URL are required fields'
+      });
+    }
+
     // Check if credit already exists
     const exists = await Credit.findOne({ url, attribution });
     if (exists) {
-      return res.status(400).json({ message: 'This image is already in your credits' });
+      return res.status(400).json({ 
+        success: false,
+        message: 'This image is already in your credits' 
+      });
     }
 
-    const newCredit = new Credit({ artist, attribution, url, thumbnail, query });
+    const newCredit = new Credit({ artist, attribution, url, thumbnail, query, license_url });
     await newCredit.save();
-    res.status(201).json(newCredit);
+    
+    res.status(201).json({
+      success: true,
+      data: newCredit
+    });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error('Error adding credit:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Server error while adding credit',
+      error: error.message 
+    });
   }
 });
 
@@ -86,7 +139,5 @@ app.delete('/api/credits/:id', async (req, res) => {
   }
 });
 
-// Start server
-app.listen(port, () => {
-  console.log(`Server running on port ${port}`);
-});
+// Export the app for Vercel
+module.exports = app;

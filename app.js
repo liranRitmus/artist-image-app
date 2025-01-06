@@ -89,12 +89,10 @@ document.addEventListener('DOMContentLoaded', () => {
       const result = {
         artist,
         image,
-        attribution: imageDetails.attribution || 'Unknown'
+        attribution: imageDetails.attribution || 'Unknown',
+        license_url: imageDetails.license_url
       };
       currentResults[index] = result;
-
-      // Initialize credits array
-      let credits = [];
 
       const imageItem = document.createElement('div');
       imageItem.className = 'image-item';
@@ -103,11 +101,15 @@ document.addEventListener('DOMContentLoaded', () => {
         <img src="${image.url}" alt="${artist}">
         <div class="attribution">
           <p>${result.attribution}</p>
-          <p>License: ${image.license}</p>
+          <p>License: <a href="${imageDetails.license_url}" target="_blank">${image.license}</a></p>
           <a href="${image.url}" target="_blank" class="source-link">View Source</a>
         </div>
         <button class="change-button" data-artist="${artist}" data-index="${index}">Change</button>
-        <button class="add-credit-button" data-artist="${artist}" data-attribution="${result.attribution}" data-url="${image.url}">Add</button>
+        <button class="add-credit-button" 
+                data-artist="${artist}" 
+                data-attribution="${result.attribution}" 
+                data-url="${image.url}"
+                data-license-url="${imageDetails.license_url}">Add</button>
       `;
       
       // Store the shown image index to avoid duplicates
@@ -167,7 +169,7 @@ document.addEventListener('DOMContentLoaded', () => {
       
       // Save to credits via API
       try {
-        const response = await fetch('http://localhost:3001/api/credits', {
+        const response = await fetch('/api/credits', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -177,7 +179,8 @@ document.addEventListener('DOMContentLoaded', () => {
             attribution: attribution,
             url: url,
             thumbnail: button.closest('.image-item').querySelector('img').src,
-            query: button.dataset.artist
+            query: button.dataset.artist,
+            license_url: button.dataset.licenseUrl
           })
         });
 

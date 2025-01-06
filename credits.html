@@ -47,7 +47,7 @@
               <td>${credit.query}</td>
               <td><img src="${credit.thumbnail}" alt="Thumbnail" class="credit-thumbnail"></td>
               <td><a href="${credit.url}" target="_blank" class="image-url">View Image</a></td>
-              <td>${credit.attribution.replace('To view a copy of this license, visit', 'To view a copy of this license, visit <a href="${credit.license_url}">here</a>')}</td>
+              <td>${credit.attribution.replace('To view a copy of this license, visit', `To view a copy of this license, visit <a href="${credit.license_url}" target="_blank">here</a>`)}</td>
               <td><button class="delete-button" data-id="${credit._id}">Delete</button></td>
             </tr>
           `)

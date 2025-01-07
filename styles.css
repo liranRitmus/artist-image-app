@@ -422,6 +422,36 @@ h1 {
 }
 
 /* Notification Styles */
+/* Settings Form Styles */
+.form-group {
+  margin-bottom: 1.5rem;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 0.5rem;
+  color: var(--text-color);
+  font-weight: 500;
+}
+
+.form-group input {
+  width: 100%;
+  padding: 0.8rem 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  background: rgba(26, 26, 26, 0.6);
+  color: var(--text-color);
+  font-size: 1rem;
+  transition: all 0.3s ease;
+  backdrop-filter: blur(10px);
+}
+
+.form-group input:focus {
+  outline: none;
+  border-color: var(--accent-color);
+  box-shadow: 0 0 20px var(--glow-color);
+}
+
 .notification {
   position: fixed;
   bottom: 20px;
@@ -435,6 +465,10 @@ h1 {
   animation: slideIn 0.3s ease-out;
   backdrop-filter: blur(10px);
   border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.notification.error {
+  background: linear-gradient(135deg, #FF6B6B, #FF4949);
 }
 
 @keyframes slideIn {

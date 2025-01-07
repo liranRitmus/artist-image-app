@@ -12,12 +12,24 @@ const passwordSchema = new mongoose.Schema({
 });
 const Password = mongoose.model('Password', passwordSchema);
 
-// Initialize password if not exists
+// API Key Schema
+const apiKeySchema = new mongoose.Schema({
+  key: String,
+  updatedAt: { type: Date, default: Date.now }
+});
+const ApiKey = mongoose.model('ApiKey', apiKeySchema);
+
+// Initialize password and API key if not exists
 async function initializePassword() {
   const existingPassword = await Password.findOne();
   if (!existingPassword) {
     const hash = await bcrypt.hash('OP748748!', SALT_ROUNDS);
     await Password.create({ hash });
+  }
+  
+  const existingApiKey = await ApiKey.findOne();
+  if (!existingApiKey) {
+    await ApiKey.create({ key: 'rCrDd2QB2rhBCU1HKI7AYhQsGzCpMt' });
   }
 }
 
@@ -206,6 +218,62 @@ mongoose.connection.once('open', async () => {
   } catch (error) {
     console.error('Failed to initialize password:', error);
     process.exit(1);
+  }
+});
+
+// Get API Key
+app.get('/api/settings/apikey', async (req, res) => {
+  try {
+    const apiKey = await ApiKey.findOne();
+    if (!apiKey) {
+      return res.status(404).json({ 
+        success: false,
+        message: 'API key not found'
+      });
+    }
+    res.json({
+      success: true,
+      key: apiKey.key
+    });
+  } catch (error) {
+    console.error('Error getting API key:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Error retrieving API key'
+    });
+  }
+});
+
+// Update API Key
+app.post('/api/settings/apikey', async (req, res) => {
+  try {
+    const { key } = req.body;
+    if (!key) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'API key is required'
+      });
+    }
+
+    const apiKey = await ApiKey.findOne();
+    if (apiKey) {
+      apiKey.key = key;
+      apiKey.updatedAt = new Date();
+      await apiKey.save();
+    } else {
+      await ApiKey.create({ key });
+    }
+
+    res.json({
+      success: true,
+      message: 'API key updated successfully'
+    });
+  } catch (error) {
+    console.error('Error updating API key:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Error updating API key'
+    });
   }
 });
 

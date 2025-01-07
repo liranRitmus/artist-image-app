@@ -1,6 +1,27 @@
-const accessToken = 'rCrDd2QB2rhBCU1HKI7AYhQsGzCpMt';
+let accessToken = null;
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+  // Fetch API key from backend
+  try {
+    const response = await fetch('/api/settings/apikey');
+    const data = await response.json();
+    if (data.success) {
+      accessToken = data.key;
+    } else {
+      throw new Error('Failed to fetch API key');
+    }
+  } catch (error) {
+    console.error('Error fetching API key:', error);
+    const notification = document.createElement('div');
+    notification.className = 'notification error';
+    notification.textContent = 'Failed to load API key. Please check settings.';
+    document.body.appendChild(notification);
+    setTimeout(() => {
+      notification.remove();
+    }, 3000);
+    return;
+  }
+
   const searchInput = document.getElementById('searchInput');
   const searchButton = document.getElementById('searchButton');
   const exportButton = document.getElementById('exportButton');
@@ -41,6 +62,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Function to fetch and display image for a single artist
   const fetchArtistImage = async (artist, index) => {
+    if (!accessToken) {
+      const errorItem = document.createElement('div');
+      errorItem.className = 'image-item error';
+      errorItem.textContent = `Error: API key not configured. Please check settings.`;
+      return errorItem;
+    }
     try {
       const response = await fetch(
         `https://api.openverse.org/v1/images/?q=${encodeURIComponent(artist)}`,

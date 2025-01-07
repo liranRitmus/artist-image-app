@@ -142,6 +142,39 @@ app.get('/api/credits', async (req, res) => {
   }
 });
 
+// Update credit title
+app.put('/api/credits/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { query } = req.body;
+    
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: 'Invalid credit ID format' });
+    }
+
+    const updatedCredit = await Credit.findByIdAndUpdate(
+      id,
+      { query },
+      { new: true }
+    );
+    
+    if (!updatedCredit) {
+      return res.status(404).json({ message: 'Credit not found' });
+    }
+    
+    res.json({
+      success: true,
+      credit: updatedCredit
+    });
+  } catch (error) {
+    console.error('Error updating credit:', error);
+    res.status(500).json({ 
+      message: 'Error updating credit',
+      error: error.message 
+    });
+  }
+});
+
 // Delete a credit
 app.delete('/api/credits/:id', async (req, res) => {
   try {

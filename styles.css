@@ -278,6 +278,75 @@ h1 {
   object-fit: cover;
   border-radius: 8px;
   border: 1px solid rgba(255, 255, 255, 0.1);
+  margin-bottom: 0.5rem;
+}
+
+.thumbnail-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.thumbnail-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: center;
+}
+
+.title-cell {
+  position: relative;
+  padding-right: 3rem;
+}
+
+.title-text {
+  display: inline-block;
+  margin-right: 0.5rem;
+}
+
+.edit-button {
+  padding: 0.25rem 0.5rem;
+  background: var(--gradient-2);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  transition: all 0.3s ease;
+  opacity: 0;
+  position: absolute;
+  right: 0.5rem;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.title-cell:hover .edit-button {
+  opacity: 1;
+}
+
+.title-input {
+  padding: 0.25rem 0.5rem;
+  border: 1px solid var(--accent-color);
+  border-radius: 8px;
+  background: rgba(26, 26, 26, 0.6);
+  color: var(--text-color);
+  font-size: 0.9rem;
+  margin-right: 0.5rem;
+}
+
+.save-button {
+  padding: 0.25rem 0.5rem;
+  background: var(--gradient-1);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  transition: all 0.3s ease;
+}
+
+.save-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 0 20px var(--glow-color);
 }
 
 .image-url {

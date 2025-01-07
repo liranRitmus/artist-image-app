@@ -47,11 +47,18 @@
         creditsList.innerHTML = credits
           .map(credit => `
             <tr class="credit-item">
-              <td>${credit.query}</td>
-              <td><img src="${credit.thumbnail}" alt="Thumbnail" class="credit-thumbnail"></td>
+              <td class="title-cell">
+                <span class="title-text">${credit.query}</span>
+                <button class="edit-button" data-id="${credit._id}">Edit</button>
+              </td>
               <td>
-                <a href="${credit.url}" target="_blank" class="image-url">View Image</a>
-                <button class="download-button" data-url="${credit.url}">Download</button>
+                <div class="thumbnail-container">
+                  <img src="${credit.thumbnail}" alt="Thumbnail" class="credit-thumbnail">
+                  <div class="thumbnail-actions">
+                    <a href="${credit.url}" target="_blank" class="image-url">View</a>
+                    <button class="download-button" data-url="${credit.url}">Download</button>
+                  </div>
+                </div>
               </td>
               <td>${credit.attribution.replace('To view a copy of this license, visit', `To view a copy of this license, visit <a href="${credit.license_url}" target="_blank">here</a>`)}</td>
               <td><button class="delete-button" data-id="${credit._id}">Delete</button></td>
@@ -61,6 +68,97 @@
       } catch (error) {
         creditsList.innerHTML = '<p>Error loading credits. Please try again later.</p>';
         console.error('Error fetching credits:', error);
+      }
+    });
+
+    // Handle edit button clicks
+    document.addEventListener('click', async (e) => {
+      if (e.target.classList.contains('edit-button')) {
+        const button = e.target;
+        const titleCell = button.closest('.title-cell');
+        const titleText = titleCell.querySelector('.title-text');
+        const currentTitle = titleText.textContent;
+        const creditId = button.dataset.id;
+
+        // Create input field
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.value = currentTitle;
+        input.className = 'title-input';
+
+        // Create save button
+        const saveButton = document.createElement('button');
+        saveButton.textContent = 'Save';
+        saveButton.className = 'save-button';
+
+        // Replace title with input and button
+        titleText.style.display = 'none';
+        button.style.display = 'none';
+        titleCell.appendChild(input);
+        titleCell.appendChild(saveButton);
+
+        // Focus input
+        input.focus();
+
+        // Handle save button click
+        saveButton.addEventListener('click', async () => {
+          const newTitle = input.value.trim();
+          if (newTitle) {
+            try {
+              const response = await fetch(`/api/credits/${creditId}`, {
+                method: 'PUT',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ query: newTitle })
+              });
+
+              if (response.ok) {
+                titleText.textContent = newTitle;
+                titleText.style.display = '';
+                button.style.display = '';
+                titleCell.removeChild(input);
+                titleCell.removeChild(saveButton);
+
+                const notification = document.createElement('div');
+                notification.className = 'notification';
+                notification.textContent = 'Title updated successfully!';
+                document.body.appendChild(notification);
+                setTimeout(() => {
+                  notification.remove();
+                }, 3000);
+              } else {
+                throw new Error('Failed to update title');
+              }
+            } catch (error) {
+              console.error('Error updating title:', error);
+              const notification = document.createElement('div');
+              notification.className = 'notification error';
+              notification.textContent = 'Failed to update title';
+              document.body.appendChild(notification);
+              setTimeout(() => {
+                notification.remove();
+              }, 3000);
+            }
+          }
+        });
+
+        // Handle enter key
+        input.addEventListener('keypress', (e) => {
+          if (e.key === 'Enter') {
+            saveButton.click();
+          }
+        });
+
+        // Handle escape key
+        input.addEventListener('keydown', (e) => {
+          if (e.key === 'Escape') {
+            titleText.style.display = '';
+            button.style.display = '';
+            titleCell.removeChild(input);
+            titleCell.removeChild(saveButton);
+          }
+        });
       }
     });
 

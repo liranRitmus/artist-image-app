@@ -272,30 +272,70 @@ h1 {
   color: var(--text-color);
 }
 
+/* Table Cell Styles */
 .credit-thumbnail {
-  width: 80px;
-  height: 80px;
+  width: 100px;
+  height: 100px;
   object-fit: cover;
   border-radius: 8px;
   border: 1px solid rgba(255, 255, 255, 0.1);
-  margin-bottom: 0.5rem;
+  display: block;
+  margin: 0 auto;
 }
 
-.thumbnail-container {
+.thumbnail-cell {
+  text-align: center;
+  vertical-align: middle;
+}
+
+.actions-cell {
+  vertical-align: middle;
+}
+
+.action-buttons {
   display: flex;
   flex-direction: column;
+  gap: 0.5rem;
   align-items: center;
 }
 
-.thumbnail-actions {
-  display: flex;
-  gap: 0.5rem;
-  justify-content: center;
+.action-button {
+  width: 100px;
+  padding: 0.5rem;
+  text-align: center;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  transition: all 0.3s ease;
+}
+
+.view-button {
+  background: var(--gradient-2);
+  color: white;
+  text-decoration: none;
+}
+
+.view-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 0 20px var(--glow-color);
+  color: white;
+}
+
+.attribution-cell {
+  font-size: 0.9rem;
+  line-height: 1.4;
+  padding-right: 1rem;
+}
+
+.delete-cell {
+  text-align: center;
+  vertical-align: middle;
 }
 
 .title-cell {
   position: relative;
   padding-right: 3rem;
+  vertical-align: middle;
+  min-width: 150px;
 }
 
 .title-text {
@@ -377,15 +417,15 @@ h1 {
 }
 
 .download-button {
-  padding: 0.25rem 0.5rem;
+  padding: 0.5rem;
   background: var(--gradient-1);
   color: white;
   border: none;
   border-radius: 8px;
   cursor: pointer;
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   transition: all 0.3s ease;
-  margin-left: 0.5rem;
+  width: 100px;
 }
 
 .download-button:hover {

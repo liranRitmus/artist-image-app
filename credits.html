@@ -20,11 +20,11 @@
     <table id="creditsTable">
       <thead>
         <tr>
-          <th>Artist</th>
-          <th>Thumbnail</th>
-          <th>URL</th>
-          <th>Attribution</th>
-          <th>Action</th>
+          <th width="15%">Artist</th>
+          <th width="20%">Thumbnail</th>
+          <th width="15%">Actions</th>
+          <th width="40%">Attribution</th>
+          <th width="10%">Action</th>
         </tr>
       </thead>
       <tbody id="creditsList"></tbody>
@@ -51,17 +51,19 @@
                 <span class="title-text">${credit.query}</span>
                 <button class="edit-button" data-id="${credit._id}">Edit</button>
               </td>
-              <td>
-                <div class="thumbnail-container">
-                  <img src="${credit.thumbnail}" alt="Thumbnail" class="credit-thumbnail">
-                  <div class="thumbnail-actions">
-                    <a href="${credit.url}" target="_blank" class="image-url">View</a>
-                    <button class="download-button" data-url="${credit.url}">Download</button>
-                  </div>
+              <td class="thumbnail-cell">
+                <img src="${credit.thumbnail}" alt="Thumbnail" class="credit-thumbnail">
+              </td>
+              <td class="actions-cell">
+                <div class="action-buttons">
+                  <a href="${credit.url}" target="_blank" class="action-button view-button">View</a>
+                  <button class="action-button download-button" data-url="${credit.url}">Download</button>
                 </div>
               </td>
-              <td>${credit.attribution.replace('To view a copy of this license, visit', `To view a copy of this license, visit <a href="${credit.license_url}" target="_blank">here</a>`)}</td>
-              <td><button class="delete-button" data-id="${credit._id}">Delete</button></td>
+              <td class="attribution-cell">${credit.attribution.replace('To view a copy of this license, visit', `To view a copy of this license, visit <a href="${credit.license_url}" target="_blank">here</a>`)}</td>
+              <td class="delete-cell">
+                <button class="delete-button" data-id="${credit._id}">Delete</button>
+              </td>
             </tr>
           `)
           .join('');

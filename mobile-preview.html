@@ -5,45 +5,27 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Mobile Preview</title>
   <style>
-    html, body {
+    html {
       height: 100%;
-      margin: 0;
-      padding: 0;
-      overflow: hidden;
-      background: #480e8e;
-    }
-    
-    .background-container {
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: #480e8e;
-      background-size: cover;
-      z-index: 0;
-    }
-    
-    .content-container {
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      overflow-y: auto;
-      z-index: 1;
     }
     
     body {
+      margin: 0;
+      padding: 0;
       font-family: Arial, sans-serif;
       color: #ffffff;
-      position: relative;
-      height: 100%;
-      font-size: 16px;;
+      font-size: 16px;
+      background: url(Background_noStar@3x.jpg) center center;
+      background-attachment: fixed;
+      background-size: cover;
+      background-repeat: no-repeat;
+      min-height: 100vh;
+      overflow-y: auto;
+      overflow-x: hidden;
     }
     
     .mobile-preview {
-      min-height: 100%;
+      padding: 20px;
     }
     .mobile-attribution {
       padding: 15px;
@@ -61,12 +43,9 @@
   </style>
 </head>
 <body>
-  
-  
-    <div class="mobile-preview">
+  <div class="mobile-preview">
     <div id="mobileCreditsList"></div>
-    </div>
-  
+  </div>
   <script>
     document.addEventListener('DOMContentLoaded', async () => {
       const creditsList = document.getElementById('mobileCreditsList');
@@ -91,7 +70,16 @@
           `)
           .join('');
       } catch (error) {
-        creditsList.innerHTML = '<p class="no-credits">Error loading credits</p>';
+        // Add test content to verify scrolling
+        let testContent = '';
+        for(let i = 0; i < 20; i++) {
+          testContent += `
+            <div class="mobile-attribution">
+              <p>Test Credit ${i + 1}</p>
+            </div>
+          `;
+        }
+        creditsList.innerHTML = testContent;
         console.error('Error fetching credits:', error);
       }
     });

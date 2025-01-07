@@ -2,6 +2,9 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const bcrypt = require('bcrypt');
+const archiver = require('archiver');
+const axios = require('axios');
+const path = require('path');
 
 const app = express();
 const SALT_ROUNDS = 12;
@@ -307,6 +310,63 @@ app.post('/api/settings/apikey', async (req, res) => {
       success: false,
       message: 'Error updating API key'
     });
+  }
+});
+
+// Export full CSV with images
+app.get('/api/credits/export-full', async (req, res) => {
+  try {
+    const credits = await Credit.find().sort({ createdAt: -1 });
+    
+    if (credits.length === 0) {
+      return res.status(404).json({ message: 'No credits to export' });
+    }
+
+    // Create ZIP archive
+    const archive = archiver('zip', {
+      zlib: { level: 9 } // Maximum compression
+    });
+
+    // Set response headers
+    res.attachment('credits-with-images.zip');
+    archive.pipe(res);
+
+    // Create CSV content with local image paths
+    const csvRows = [['Name', 'Image Path', 'Attribution']];
+    
+    // Download and add images to ZIP
+    for (let i = 0; i < credits.length; i++) {
+      const credit = credits[i];
+      const imageName = `image-${i + 1}${path.extname(credit.url)}`;
+      
+      try {
+        const imageResponse = await axios.get(credit.url, { responseType: 'arraybuffer' });
+        archive.append(Buffer.from(imageResponse.data), { name: `images/${imageName}` });
+        
+        csvRows.push([
+          credit.query,
+          `images/${imageName}`,
+          credit.attribution
+        ]);
+      } catch (error) {
+        console.error(`Error downloading image for ${credit.query}:`, error);
+        // Skip failed image but continue with others
+        continue;
+      }
+    }
+
+    // Add CSV file to ZIP
+    const csvContent = csvRows
+      .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+      .join('\n');
+    
+    archive.append(csvContent, { name: 'credits.csv' });
+
+    // Finalize ZIP
+    await archive.finalize();
+  } catch (error) {
+    console.error('Error creating export:', error);
+    res.status(500).json({ message: 'Error creating export' });
   }
 });
 

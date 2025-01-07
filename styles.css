@@ -307,6 +307,45 @@ h1 {
   box-shadow: 0 0 20px rgba(255, 107, 155, 0.5);
 }
 
+.download-button {
+  padding: 0.25rem 0.5rem;
+  background: var(--gradient-1);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  transition: all 0.3s ease;
+  margin-left: 0.5rem;
+}
+
+.download-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 0 20px var(--glow-color);
+}
+
+.table-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 1rem;
+}
+
+.export-button {
+  padding: 0.5rem 1rem;
+  background: var(--gradient-2);
+  color: white;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: all 0.3s ease;
+}
+
+.export-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 0 20px var(--glow-color);
+}
+
 /* Mobile Preview Styles */
 .mobile-preview {
   display: flex;

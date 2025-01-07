@@ -14,6 +14,9 @@
   </nav>
   <div class="container">
     <h1>Current Credits</h1>
+    <div class="table-actions">
+      <button id="exportButton" class="export-button">Export CSV</button>
+    </div>
     <table id="creditsTable">
       <thead>
         <tr>
@@ -46,7 +49,10 @@
             <tr class="credit-item">
               <td>${credit.query}</td>
               <td><img src="${credit.thumbnail}" alt="Thumbnail" class="credit-thumbnail"></td>
-              <td><a href="${credit.url}" target="_blank" class="image-url">View Image</a></td>
+              <td>
+                <a href="${credit.url}" target="_blank" class="image-url">View Image</a>
+                <button class="download-button" data-url="${credit.url}">Download</button>
+              </td>
               <td>${credit.attribution.replace('To view a copy of this license, visit', `To view a copy of this license, visit <a href="${credit.license_url}" target="_blank">here</a>`)}</td>
               <td><button class="delete-button" data-id="${credit._id}">Delete</button></td>
             </tr>
@@ -77,6 +83,65 @@
           console.error('Error deleting credit:', error);
           alert('Error deleting credit. Please try again.');
         }
+      }
+    });
+
+    // Handle download button clicks
+    document.addEventListener('click', async (e) => {
+      if (e.target.classList.contains('download-button')) {
+        const imageUrl = e.target.dataset.url;
+        try {
+          const response = await fetch(imageUrl);
+          const blob = await response.blob();
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `image-${Date.now()}.jpg`; // Generate unique filename
+          document.body.appendChild(a);
+          a.click();
+          window.URL.revokeObjectURL(url);
+          document.body.removeChild(a);
+        } catch (error) {
+          console.error('Error downloading image:', error);
+          alert('Error downloading image. Please try again.');
+        }
+      }
+    });
+
+    // Handle export CSV button click
+    document.getElementById('exportButton').addEventListener('click', async () => {
+      try {
+        const response = await fetch('/api/credits');
+        const credits = await response.json();
+
+        if (credits.length === 0) {
+          alert('No credits to export');
+          return;
+        }
+
+        const csvContent = [
+          ['Name', 'Image URL', 'Attribution'],
+          ...credits.map(credit => [
+            credit.query,
+            credit.url,
+            credit.attribution
+          ])
+        ]
+        .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+        .join('\n');
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.setAttribute('href', url);
+        link.setAttribute('download', 'credits.csv');
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      } catch (error) {
+        console.error('Error exporting CSV:', error);
+        alert('Error exporting CSV. Please try again.');
       }
     });
   </script>

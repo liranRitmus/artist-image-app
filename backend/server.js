@@ -314,22 +314,37 @@ app.post('/api/settings/apikey', async (req, res) => {
 });
 
 const fs = require('fs');
+const os = require('os');
 const { promisify } = require('util');
 const writeFile = promisify(fs.writeFile);
 const mkdir = promisify(fs.mkdir);
 const rmdir = promisify(fs.rmdir);
 const readdir = promisify(fs.readdir);
 const unlink = promisify(fs.unlink);
+const access = promisify(fs.access);
 
 // Export full CSV with images
 app.get('/api/credits/export-full', async (req, res) => {
-  const tempDir = path.join(__dirname, 'temp_export');
+  // Create unique temp directory
+  const tempDir = path.join(os.tmpdir(), `credits_export_${Date.now()}`);
   const imagesDir = path.join(tempDir, 'images');
   
+  // Track response state
+  let headersSent = false;
+  let responseEnded = false;
+  
   try {
-    // Create temp directories
+    console.log('Creating temp directories:', tempDir);
     await mkdir(tempDir, { recursive: true });
     await mkdir(imagesDir, { recursive: true });
+
+    // Verify directories were created
+    try {
+      await access(tempDir, fs.constants.W_OK);
+      await access(imagesDir, fs.constants.W_OK);
+    } catch (err) {
+      throw new Error(`Failed to create/access temp directories: ${err.message}`);
+    }
 
     const credits = await Credit.find().sort({ createdAt: -1 });
     console.log(`Found ${credits.length} credits to export`);
@@ -342,6 +357,7 @@ app.get('/api/credits/export-full', async (req, res) => {
     // Create CSV content
     const csvRows = [['Name', 'Image Path', 'Attribution']];
     let successfulDownloads = 0;
+    let lastResponse = null;
     
     // Download images to temp directory
     for (const credit of credits) {
@@ -353,7 +369,8 @@ app.get('/api/credits/export-full', async (req, res) => {
         
         while (attempts < maxAttempts) {
           try {
-            const response = await axios({
+            console.log(`Downloading ${credit.url}`);
+            lastResponse = await axios({
               method: 'get',
               url: credit.url,
               responseType: 'arraybuffer',
@@ -364,14 +381,15 @@ app.get('/api/credits/export-full', async (req, res) => {
               }
             });
 
-            if (response.status === 200 && response.data) {
-              imageData = response.data;
+            if (lastResponse.status === 200 && lastResponse.data) {
+              imageData = lastResponse.data;
               console.log(`Downloaded ${credit.artist} (${imageData.length} bytes)`);
               break;
             }
-            throw new Error(`Invalid response: ${response.status}`);
+            throw new Error(`Invalid response: ${lastResponse.status}`);
           } catch (err) {
             attempts++;
+            console.log(`Download attempt ${attempts} failed:`, err.message);
             if (attempts === maxAttempts) throw err;
             await new Promise(resolve => setTimeout(resolve, 2000));
           }
@@ -382,9 +400,8 @@ app.get('/api/credits/export-full', async (req, res) => {
         
         // Get extension from content type or URL
         let ext = '.jpg';
-        const contentType = response.headers['content-type'];
-        if (contentType && contentType.startsWith('image/')) {
-          ext = '.' + contentType.split('/')[1].split(';')[0].toLowerCase();
+        if (lastResponse.headers['content-type'] && lastResponse.headers['content-type'].startsWith('image/')) {
+          ext = '.' + lastResponse.headers['content-type'].split('/')[1].split(';')[0].toLowerCase();
         } else if (credit.url.match(/\.(jpg|jpeg|png|gif|webp)$/i)) {
           ext = credit.url.match(/\.(jpg|jpeg|png|gif|webp)$/i)[0].toLowerCase();
         }
@@ -393,6 +410,7 @@ app.get('/api/credits/export-full', async (req, res) => {
         const imagePath = path.join(imagesDir, imageName);
 
         // Save image to temp directory
+        console.log(`Writing ${imagePath}`);
         await writeFile(imagePath, imageData);
         console.log(`Saved ${imageName}`);
 
@@ -416,19 +434,33 @@ app.get('/api/credits/export-full', async (req, res) => {
     }
 
     // Save CSV file
+    console.log('Creating CSV file');
     const csvContent = csvRows
       .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
       .join('\n');
-    await writeFile(path.join(tempDir, 'credits.csv'), csvContent);
+    
+    const csvPath = path.join(tempDir, 'credits.csv');
+    await writeFile(csvPath, csvContent);
+    console.log('CSV file created');
 
     // Create zip file
-    const archive = archiver('zip');
+    console.log('Creating zip archive');
+    const archive = archiver('zip', {
+      zlib: { level: 1 } // Fastest compression
+    });
+
     archive.on('error', (err) => {
+      console.error('Archive error:', err);
       throw err;
+    });
+
+    archive.on('warning', (err) => {
+      console.warn('Archive warning:', err);
     });
 
     // Set headers
     res.attachment('credits-with-images.zip');
+    headersSent = true;
 
     // Pipe archive data to response
     archive.pipe(res);
@@ -437,36 +469,65 @@ app.get('/api/credits/export-full', async (req, res) => {
     archive.directory(tempDir, false);
 
     // Finalize archive
+    console.log('Finalizing archive');
     await archive.finalize();
-
+    
     console.log(`Export complete: ${successfulDownloads}/${credits.length} successful`);
 
     // Clean up temp directory after response is sent
-    res.on('finish', cleanup);
+    res.on('finish', () => {
+      responseEnded = true;
+      cleanup();
+    });
 
   } catch (error) {
     console.error('Export error:', error);
     await cleanup();
-    if (!res.headersSent) {
-      res.status(500).json({ message: 'Export failed', error: error.message });
+    
+    if (!headersSent && !responseEnded) {
+      res.status(500).json({ 
+        message: 'Export failed', 
+        error: error.message,
+        details: error.stack
+      });
+    } else if (!responseEnded) {
+      res.end();
     }
-    res.end();
   }
 
   // Cleanup function
   async function cleanup() {
     try {
-      // Read all files in images directory
-      const files = await readdir(imagesDir);
+      console.log('Starting cleanup');
       
-      // Delete each file
-      for (const file of files) {
-        await unlink(path.join(imagesDir, file));
+      // Check if directories exist
+      try {
+        await access(imagesDir, fs.constants.F_OK);
+        // Read all files in images directory
+        const files = await readdir(imagesDir);
+        
+        // Delete each file
+        for (const file of files) {
+          const filePath = path.join(imagesDir, file);
+          console.log(`Deleting file: ${filePath}`);
+          await unlink(filePath);
+        }
+        
+        // Remove images directory
+        console.log(`Removing directory: ${imagesDir}`);
+        await rmdir(imagesDir);
+      } catch (err) {
+        console.log('Images directory already cleaned up or not found');
       }
       
-      // Remove directories
-      await rmdir(imagesDir);
-      await rmdir(tempDir);
+      // Remove temp directory
+      try {
+        await access(tempDir, fs.constants.F_OK);
+        console.log(`Removing directory: ${tempDir}`);
+        await rmdir(tempDir);
+      } catch (err) {
+        console.log('Temp directory already cleaned up or not found');
+      }
       
       console.log('Cleanup completed');
     } catch (err) {

@@ -387,6 +387,9 @@ app.get('/api/credits/export-full', async (req, res) => {
           validateStatus: status => status === 200
         });
         
+        // Format artist name for filename (lowercase and replace spaces with underscores)
+        const formattedName = credit.artist.toLowerCase().replace(/\s+/g, '_');
+        
         // Get file extension from content-type or URL
         let ext = '.jpg';
         const contentType = imageResponse.headers['content-type'];
@@ -396,7 +399,7 @@ app.get('/api/credits/export-full', async (req, res) => {
           ext = credit.url.match(/\.(jpg|jpeg|png|gif|webp)$/i)[0].toLowerCase();
         }
         
-        const imageName = `image-${i + 1}${ext}`;
+        const imageName = `${formattedName}${ext}`;
         
         // Add file to archive with proper options
         archive.append(Buffer.from(imageResponse.data), { 

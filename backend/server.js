@@ -315,17 +315,32 @@ app.post('/api/settings/apikey', async (req, res) => {
 
 // Export full CSV with images
 app.get('/api/credits/export-full', async (req, res) => {
+  const archive = archiver('zip', {
+    zlib: { level: 9 } // Maximum compression
+  });
+
+  // Listen for archive errors
+  archive.on('error', (err) => {
+    console.error('Archive error:', err);
+    res.status(500).end();
+  });
+
+  // Listen for archive warnings
+  archive.on('warning', (err) => {
+    if (err.code === 'ENOENT') {
+      console.warn('Archive warning:', err);
+    } else {
+      console.error('Archive warning:', err);
+      res.status(500).end();
+    }
+  });
+
   try {
     const credits = await Credit.find().sort({ createdAt: -1 });
     
     if (credits.length === 0) {
       return res.status(404).json({ message: 'No credits to export' });
     }
-
-    // Create ZIP archive
-    const archive = archiver('zip', {
-      zlib: { level: 9 } // Maximum compression
-    });
 
     // Set response headers
     res.attachment('credits-with-images.zip');
@@ -337,11 +352,21 @@ app.get('/api/credits/export-full', async (req, res) => {
     // Download and add images to ZIP
     for (let i = 0; i < credits.length; i++) {
       const credit = credits[i];
-      const imageName = `image-${i + 1}${path.extname(credit.url)}`;
-      
       try {
-        const imageResponse = await axios.get(credit.url, { responseType: 'arraybuffer' });
-        archive.append(Buffer.from(imageResponse.data), { name: `images/${imageName}` });
+        // Get file extension from content-type or fallback to .jpg
+        const imageResponse = await axios.get(credit.url, { 
+          responseType: 'arraybuffer',
+          validateStatus: status => status === 200 // Only accept 200 status
+        });
+        
+        const contentType = imageResponse.headers['content-type'];
+        const ext = contentType ? `.${contentType.split('/')[1]}` : '.jpg';
+        const imageName = `image-${i + 1}${ext}`;
+        
+        archive.append(Buffer.from(imageResponse.data), { 
+          name: `images/${imageName}`,
+          date: new Date()
+        });
         
         csvRows.push([
           credit.query,
@@ -350,8 +375,12 @@ app.get('/api/credits/export-full', async (req, res) => {
         ]);
       } catch (error) {
         console.error(`Error downloading image for ${credit.query}:`, error);
-        // Skip failed image but continue with others
-        continue;
+        // Add error info to CSV instead of skipping
+        csvRows.push([
+          credit.query,
+          `Error downloading: ${credit.url}`,
+          credit.attribution
+        ]);
       }
     }
 
@@ -360,13 +389,28 @@ app.get('/api/credits/export-full', async (req, res) => {
       .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
       .join('\n');
     
-    archive.append(csvContent, { name: 'credits.csv' });
+    archive.append(csvContent, { 
+      name: 'credits.csv',
+      date: new Date()
+    });
 
-    // Finalize ZIP
-    await archive.finalize();
+    // Finalize ZIP and handle completion
+    archive.finalize().then(() => {
+      console.log('Archive finalized successfully');
+    }).catch(err => {
+      console.error('Error finalizing archive:', err);
+      res.status(500).end();
+    });
   } catch (error) {
     console.error('Error creating export:', error);
-    res.status(500).json({ message: 'Error creating export' });
+    // Ensure the response is ended
+    if (!res.headersSent) {
+      res.status(500).json({ message: 'Error creating export' });
+    } else {
+      res.status(500).end();
+    }
+    // Destroy the archive to clean up
+    archive.destroy();
   }
 });
 

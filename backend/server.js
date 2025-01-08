@@ -380,12 +380,38 @@ app.get('/api/credits/export-full', async (req, res) => {
     for (let i = 0; i < credits.length; i++) {
       const credit = credits[i];
       try {
-        const imageResponse = await axios.get(credit.url, { 
-          responseType: 'arraybuffer',
-          timeout: 5000, // 5 second timeout
-          maxContentLength: 10 * 1024 * 1024, // 10MB max
-          validateStatus: status => status === 200
-        });
+        // Try to download with retries
+        let imageResponse;
+        let attempts = 0;
+        const maxAttempts = 3;
+        
+        while (attempts < maxAttempts) {
+          try {
+            imageResponse = await axios.get(credit.url, { 
+              responseType: 'arraybuffer',
+              timeout: 30000, // 30 second timeout
+              maxContentLength: 50 * 1024 * 1024, // 50MB max
+              validateStatus: status => status === 200,
+              headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+              }
+            });
+            break; // Success, exit retry loop
+          } catch (downloadError) {
+            attempts++;
+            if (attempts === maxAttempts) {
+              throw new Error(
+                downloadError.response
+                  ? `HTTP ${downloadError.response.status}: ${downloadError.response.statusText}`
+                  : downloadError.code === 'ECONNABORTED'
+                  ? 'Timeout after 30 seconds'
+                  : downloadError.message
+              );
+            }
+            // Wait 2 seconds before retrying
+            await new Promise(resolve => setTimeout(resolve, 2000));
+          }
+        }
         
         // Format artist name for filename (lowercase and replace spaces with underscores)
         const formattedName = credit.artist.toLowerCase().replace(/\s+/g, '_');
@@ -415,9 +441,10 @@ app.get('/api/credits/export-full', async (req, res) => {
         ]);
       } catch (error) {
         console.error(`Error downloading image for ${credit.query}:`, error);
+        const errorMessage = error.message || 'Unknown error';
         csvRows.push([
           credit.query,
-          `Error downloading: ${credit.url}`,
+          `Error downloading: ${errorMessage}`,
           credit.attribution
         ]);
       }

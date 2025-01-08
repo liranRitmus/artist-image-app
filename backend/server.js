@@ -315,14 +315,39 @@ app.post('/api/settings/apikey', async (req, res) => {
 
 // Export full CSV with images
 app.get('/api/credits/export-full', async (req, res) => {
+  // Set headers first
+  res.setHeader('Content-Type', 'application/zip');
+  res.setHeader('Content-Disposition', 'attachment; filename=credits-with-images.zip');
+  
   const archive = archiver('zip', {
-    zlib: { level: 9 } // Maximum compression
+    store: true // Sets the compression method to STORE (no compression)
+  });
+
+  // Pipe archive data to the response
+  const stream = archive.pipe(res);
+
+  // Handle stream errors
+  stream.on('error', (err) => {
+    console.error('Stream error:', err);
+    // Clean up
+    archive.destroy();
+    if (!res.headersSent) {
+      res.status(500).json({ message: 'Error during download' });
+    } else {
+      res.end();
+    }
   });
 
   // Listen for archive errors
   archive.on('error', (err) => {
     console.error('Archive error:', err);
-    res.status(500).end();
+    // Clean up
+    archive.destroy();
+    if (!res.headersSent) {
+      res.status(500).json({ message: 'Error creating archive' });
+    } else {
+      res.end();
+    }
   });
 
   // Listen for archive warnings
@@ -331,7 +356,12 @@ app.get('/api/credits/export-full', async (req, res) => {
       console.warn('Archive warning:', err);
     } else {
       console.error('Archive warning:', err);
-      res.status(500).end();
+      archive.destroy();
+      if (!res.headersSent) {
+        res.status(500).json({ message: 'Archive warning' });
+      } else {
+        res.end();
+      }
     }
   });
 
@@ -339,12 +369,9 @@ app.get('/api/credits/export-full', async (req, res) => {
     const credits = await Credit.find().sort({ createdAt: -1 });
     
     if (credits.length === 0) {
+      archive.destroy();
       return res.status(404).json({ message: 'No credits to export' });
     }
-
-    // Set response headers
-    res.attachment('credits-with-images.zip');
-    archive.pipe(res);
 
     // Create CSV content with local image paths
     const csvRows = [['Name', 'Image Path', 'Attribution']];
@@ -353,19 +380,29 @@ app.get('/api/credits/export-full', async (req, res) => {
     for (let i = 0; i < credits.length; i++) {
       const credit = credits[i];
       try {
-        // Get file extension from content-type or fallback to .jpg
         const imageResponse = await axios.get(credit.url, { 
           responseType: 'arraybuffer',
-          validateStatus: status => status === 200 // Only accept 200 status
+          timeout: 5000, // 5 second timeout
+          maxContentLength: 10 * 1024 * 1024, // 10MB max
+          validateStatus: status => status === 200
         });
         
+        // Get file extension from content-type or URL
+        let ext = '.jpg';
         const contentType = imageResponse.headers['content-type'];
-        const ext = contentType ? `.${contentType.split('/')[1]}` : '.jpg';
+        if (contentType && contentType.startsWith('image/')) {
+          ext = '.' + contentType.split('/')[1].split(';')[0].toLowerCase();
+        } else if (credit.url.match(/\.(jpg|jpeg|png|gif|webp)$/i)) {
+          ext = credit.url.match(/\.(jpg|jpeg|png|gif|webp)$/i)[0].toLowerCase();
+        }
+        
         const imageName = `image-${i + 1}${ext}`;
         
+        // Add file to archive with proper options
         archive.append(Buffer.from(imageResponse.data), { 
           name: `images/${imageName}`,
-          date: new Date()
+          date: new Date(),
+          mode: 0o644 // Proper file permissions
         });
         
         csvRows.push([
@@ -375,7 +412,6 @@ app.get('/api/credits/export-full', async (req, res) => {
         ]);
       } catch (error) {
         console.error(`Error downloading image for ${credit.query}:`, error);
-        // Add error info to CSV instead of skipping
         csvRows.push([
           credit.query,
           `Error downloading: ${credit.url}`,
@@ -391,26 +427,23 @@ app.get('/api/credits/export-full', async (req, res) => {
     
     archive.append(csvContent, { 
       name: 'credits.csv',
-      date: new Date()
+      date: new Date(),
+      mode: 0o644
     });
 
-    // Finalize ZIP and handle completion
-    archive.finalize().then(() => {
-      console.log('Archive finalized successfully');
-    }).catch(err => {
-      console.error('Error finalizing archive:', err);
-      res.status(500).end();
-    });
+    // Finalize archive
+    await archive.finalize();
+    
+    console.log('Archive created successfully');
   } catch (error) {
     console.error('Error creating export:', error);
-    // Ensure the response is ended
+    // Clean up
+    archive.destroy();
     if (!res.headersSent) {
       res.status(500).json({ message: 'Error creating export' });
     } else {
-      res.status(500).end();
+      res.end();
     }
-    // Destroy the archive to clean up
-    archive.destroy();
   }
 });
 

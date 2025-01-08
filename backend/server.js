@@ -315,142 +315,148 @@ app.post('/api/settings/apikey', async (req, res) => {
 
 // Export full CSV with images
 app.get('/api/credits/export-full', async (req, res) => {
-  // Set headers first
-  res.setHeader('Content-Type', 'application/zip');
-  res.setHeader('Content-Disposition', 'attachment; filename=credits-with-images.zip');
-  
-  const archive = archiver('zip', {
-    store: true // Sets the compression method to STORE (no compression)
-  });
-
-  // Pipe archive data to the response
-  const stream = archive.pipe(res);
-
-  // Handle stream errors
-  stream.on('error', (err) => {
-    console.error('Stream error:', err);
-    // Clean up
-    archive.destroy();
-    if (!res.headersSent) {
-      res.status(500).json({ message: 'Error during download' });
-    } else {
-      res.end();
-    }
-  });
-
-  // Listen for archive errors
-  archive.on('error', (err) => {
-    console.error('Archive error:', err);
-    // Clean up
-    archive.destroy();
-    if (!res.headersSent) {
-      res.status(500).json({ message: 'Error creating archive' });
-    } else {
-      res.end();
-    }
-  });
-
-  // Listen for archive warnings
-  archive.on('warning', (err) => {
-    if (err.code === 'ENOENT') {
-      console.warn('Archive warning:', err);
-    } else {
-      console.error('Archive warning:', err);
-      archive.destroy();
-      if (!res.headersSent) {
-        res.status(500).json({ message: 'Archive warning' });
-      } else {
-        res.end();
-      }
-    }
-  });
+  let archive = null;
+  let hasError = false;
 
   try {
     const credits = await Credit.find().sort({ createdAt: -1 });
     
     if (credits.length === 0) {
-      archive.destroy();
       return res.status(404).json({ message: 'No credits to export' });
     }
 
+    // Initialize archive after we know we have credits
+    archive = archiver('zip', {
+      store: true, // No compression
+      zlib: { level: 0 } // No compression
+    });
+
+    // Set up archive event handlers
+    archive.on('warning', (err) => {
+      console.warn('Archive warning:', err);
+      if (err.code !== 'ENOENT') {
+        hasError = true;
+        archive.abort(); // Abort on non-ENOENT warnings
+      }
+    });
+
+    archive.on('error', (err) => {
+      console.error('Archive error:', err);
+      hasError = true;
+      archive.abort();
+    });
+
+    // Track progress
+    let totalBytes = 0;
+    archive.on('entry', (entry) => {
+      totalBytes += entry.stats.size;
+      console.log(`Added ${entry.name} (${entry.stats.size} bytes) - Total: ${totalBytes} bytes`);
+    });
+
+    // Set response headers
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', 'attachment; filename=credits-with-images.zip');
+    
+    // Pipe archive to response with error handling
+    archive.pipe(res)
+      .on('error', (err) => {
+        console.error('Response stream error:', err);
+        hasError = true;
+        archive.abort();
+      })
+      .on('end', () => {
+        console.log('Response stream ended');
+      });
+
     // Create CSV content with local image paths
     const csvRows = [['Name', 'Image Path', 'Attribution']];
+    let successfulDownloads = 0;
     
-    // Download and add images to ZIP
-    for (let i = 0; i < credits.length; i++) {
-      const credit = credits[i];
-      try {
-        // Try to download with retries
-        let imageResponse;
-        let attempts = 0;
-        const maxAttempts = 3;
+    // Process images in smaller batches to prevent memory issues
+    const batchSize = 10;
+    for (let i = 0; i < credits.length; i += batchSize) {
+      const batch = credits.slice(i, i + batchSize);
+      
+      // Process batch concurrently
+      await Promise.all(batch.map(async (credit) => {
+        if (hasError) return; // Skip if we've encountered an error
         
-        while (attempts < maxAttempts) {
-          try {
-            imageResponse = await axios.get(credit.url, { 
-              responseType: 'arraybuffer',
-              timeout: 30000, // 30 second timeout
-              maxContentLength: 50 * 1024 * 1024, // 50MB max
-              validateStatus: status => status === 200,
-              headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-              }
-            });
-            break; // Success, exit retry loop
-          } catch (downloadError) {
-            attempts++;
-            if (attempts === maxAttempts) {
-              throw new Error(
-                downloadError.response
-                  ? `HTTP ${downloadError.response.status}: ${downloadError.response.statusText}`
-                  : downloadError.code === 'ECONNABORTED'
-                  ? 'Timeout after 30 seconds'
-                  : downloadError.message
-              );
+        try {
+          // Try to download with retries
+          let imageResponse;
+          let attempts = 0;
+          const maxAttempts = 3;
+          
+          while (attempts < maxAttempts) {
+            try {
+              imageResponse = await axios.get(credit.url, { 
+                responseType: 'arraybuffer',
+                timeout: 30000,
+                maxContentLength: 50 * 1024 * 1024,
+                validateStatus: status => status === 200,
+                headers: {
+                  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+                }
+              });
+              break;
+            } catch (downloadError) {
+              attempts++;
+              if (attempts === maxAttempts) throw downloadError;
+              await new Promise(resolve => setTimeout(resolve, 2000));
             }
-            // Wait 2 seconds before retrying
-            await new Promise(resolve => setTimeout(resolve, 2000));
           }
+
+          // Format artist name for filename
+          const formattedName = credit.artist.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+          
+          // Get file extension
+          let ext = '.jpg';
+          const contentType = imageResponse.headers['content-type'];
+          if (contentType && contentType.startsWith('image/')) {
+            ext = '.' + contentType.split('/')[1].split(';')[0].toLowerCase();
+          } else if (credit.url.match(/\.(jpg|jpeg|png|gif|webp)$/i)) {
+            ext = credit.url.match(/\.(jpg|jpeg|png|gif|webp)$/i)[0].toLowerCase();
+          }
+          
+          const imageName = `${formattedName}${ext}`;
+          
+          // Add to archive
+          archive.append(Buffer.from(imageResponse.data), { 
+            name: `images/${imageName}`,
+            date: new Date(),
+            mode: 0o644
+          });
+          
+          csvRows.push([
+            credit.query,
+            `images/${imageName}`,
+            credit.attribution
+          ]);
+          
+          successfulDownloads++;
+          console.log(`Successfully processed ${successfulDownloads}/${credits.length} images`);
+          
+        } catch (error) {
+          console.error(`Error downloading image for ${credit.query}:`, error);
+          csvRows.push([
+            credit.query,
+            `Error downloading: ${error.message || 'Unknown error'}`,
+            credit.attribution
+          ]);
         }
-        
-        // Format artist name for filename (lowercase and replace spaces with underscores)
-        const formattedName = credit.artist.toLowerCase().replace(/\s+/g, '_');
-        
-        // Get file extension from content-type or URL
-        let ext = '.jpg';
-        const contentType = imageResponse.headers['content-type'];
-        if (contentType && contentType.startsWith('image/')) {
-          ext = '.' + contentType.split('/')[1].split(';')[0].toLowerCase();
-        } else if (credit.url.match(/\.(jpg|jpeg|png|gif|webp)$/i)) {
-          ext = credit.url.match(/\.(jpg|jpeg|png|gif|webp)$/i)[0].toLowerCase();
-        }
-        
-        const imageName = `${formattedName}${ext}`;
-        
-        // Add file to archive with proper options
-        archive.append(Buffer.from(imageResponse.data), { 
-          name: `images/${imageName}`,
-          date: new Date(),
-          mode: 0o644 // Proper file permissions
-        });
-        
-        csvRows.push([
-          credit.query,
-          `images/${imageName}`,
-          credit.attribution
-        ]);
-      } catch (error) {
-        console.error(`Error downloading image for ${credit.query}:`, error);
-        const errorMessage = error.message || 'Unknown error';
-        csvRows.push([
-          credit.query,
-          `Error downloading: ${errorMessage}`,
-          credit.attribution
-        ]);
+      }));
+      
+      // Small delay between batches
+      if (i + batchSize < credits.length) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
       }
     }
 
-    // Add CSV file to ZIP
+    if (hasError) {
+      throw new Error('Archive creation was aborted due to an error');
+    }
+
+    // Add CSV file
     const csvContent = csvRows
       .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
       .join('\n');
@@ -461,14 +467,19 @@ app.get('/api/credits/export-full', async (req, res) => {
       mode: 0o644
     });
 
-    // Finalize archive
+    // Finalize and handle completion
     await archive.finalize();
+    console.log(`Archive created successfully with ${successfulDownloads} images`);
     
-    console.log('Archive created successfully');
   } catch (error) {
     console.error('Error creating export:', error);
+    
     // Clean up
-    archive.destroy();
+    if (archive) {
+      archive.abort();
+    }
+    
+    // Send error response if headers haven't been sent
     if (!res.headersSent) {
       res.status(500).json({ message: 'Error creating export' });
     } else {

@@ -323,128 +323,66 @@ const readdir = promisify(fs.readdir);
 const unlink = promisify(fs.unlink);
 const access = promisify(fs.access);
 
-// Export full CSV with images
-app.get('/api/credits/export-full', async (req, res) => {
-  // Create unique temp directory
-  const tempDir = path.join(os.tmpdir(), `credits_export_${Date.now()}`);
-  const imagesDir = path.join(tempDir, 'images');
-  
-  // Track response state
-  let headersSent = false;
-  let responseEnded = false;
-  
+// Store export jobs
+const exportJobs = new Map();
+
+// Start export job
+app.post('/api/credits/export-full/start', async (req, res) => {
   try {
-    console.log('Creating temp directories:', tempDir);
-    await mkdir(tempDir, { recursive: true });
-    await mkdir(imagesDir, { recursive: true });
-
-    // Verify directories were created
-    try {
-      await access(tempDir, fs.constants.W_OK);
-      await access(imagesDir, fs.constants.W_OK);
-    } catch (err) {
-      throw new Error(`Failed to create/access temp directories: ${err.message}`);
-    }
-
+    const jobId = Date.now().toString();
     const credits = await Credit.find().sort({ createdAt: -1 });
-    console.log(`Found ${credits.length} credits to export`);
     
     if (credits.length === 0) {
-      await cleanup();
       return res.status(404).json({ message: 'No credits to export' });
     }
 
-    // Create CSV content
-    const csvRows = [['Name', 'Image Path', 'Attribution']];
-    let successfulDownloads = 0;
-    let lastResponse = null;
-    
-    // Download images to temp directory
-    for (const credit of credits) {
-      try {
-        // Download image with retries
-        let imageData;
-        let attempts = 0;
-        const maxAttempts = 3;
-        
-        while (attempts < maxAttempts) {
-          try {
-            console.log(`Downloading ${credit.url}`);
-            lastResponse = await axios({
-              method: 'get',
-              url: credit.url,
-              responseType: 'arraybuffer',
-              timeout: 30000,
-              maxContentLength: 50 * 1024 * 1024,
-              headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-              }
-            });
+    // Initialize job state
+    exportJobs.set(jobId, {
+      status: 'preparing',
+      progress: 0,
+      total: credits.length,
+      tempDir: path.join(os.tmpdir(), `credits_export_${jobId}`),
+      completed: false,
+      error: null
+    });
 
-            if (lastResponse.status === 200 && lastResponse.data) {
-              imageData = lastResponse.data;
-              console.log(`Downloaded ${credit.artist} (${imageData.length} bytes)`);
-              break;
-            }
-            throw new Error(`Invalid response: ${lastResponse.status}`);
-          } catch (err) {
-            attempts++;
-            console.log(`Download attempt ${attempts} failed:`, err.message);
-            if (attempts === maxAttempts) throw err;
-            await new Promise(resolve => setTimeout(resolve, 2000));
-          }
-        }
-
-        // Format filename
-        const formattedName = credit.artist.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
-        
-        // Get extension from content type or URL
-        let ext = '.jpg';
-        if (lastResponse.headers['content-type'] && lastResponse.headers['content-type'].startsWith('image/')) {
-          ext = '.' + lastResponse.headers['content-type'].split('/')[1].split(';')[0].toLowerCase();
-        } else if (credit.url.match(/\.(jpg|jpeg|png|gif|webp)$/i)) {
-          ext = credit.url.match(/\.(jpg|jpeg|png|gif|webp)$/i)[0].toLowerCase();
-        }
-        
-        const imageName = `${formattedName}${ext}`;
-        const imagePath = path.join(imagesDir, imageName);
-
-        // Save image to temp directory
-        console.log(`Writing ${imagePath}`);
-        await writeFile(imagePath, imageData);
-        console.log(`Saved ${imageName}`);
-
-        csvRows.push([
-          credit.query,
-          `images/${imageName}`,
-          credit.attribution
-        ]);
-
-        successfulDownloads++;
-        console.log(`Processed ${successfulDownloads}/${credits.length}`);
-
-      } catch (error) {
-        console.error(`Failed to process ${credit.artist}:`, error.message);
-        csvRows.push([
-          credit.query,
-          `Error: ${error.message}`,
-          credit.attribution
-        ]);
+    // Start processing in background
+    processExport(jobId, credits).catch(error => {
+      const job = exportJobs.get(jobId);
+      if (job) {
+        job.status = 'error';
+        job.error = error.message;
       }
-    }
+    });
 
-    // Save CSV file
-    console.log('Creating CSV file');
-    const csvContent = csvRows
-      .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
-      .join('\n');
-    
-    const csvPath = path.join(tempDir, 'credits.csv');
-    await writeFile(csvPath, csvContent);
-    console.log('CSV file created');
+    res.json({ jobId });
+  } catch (error) {
+    res.status(500).json({ message: 'Failed to start export', error: error.message });
+  }
+});
 
+// Get export status
+app.get('/api/credits/export-full/status/:jobId', (req, res) => {
+  const job = exportJobs.get(req.params.jobId);
+  if (!job) {
+    return res.status(404).json({ message: 'Export job not found' });
+  }
+  res.json(job);
+});
+
+// Download completed export
+app.get('/api/credits/export-full/download/:jobId', async (req, res) => {
+  const job = exportJobs.get(req.params.jobId);
+  if (!job) {
+    return res.status(404).json({ message: 'Export job not found' });
+  }
+
+  if (job.status !== 'completed') {
+    return res.status(400).json({ message: 'Export not ready for download' });
+  }
+
+  try {
     // Create zip file
-    console.log('Creating zip archive');
     const archive = archiver('zip', {
       zlib: { level: 1 } // Fastest compression
     });
@@ -454,86 +392,158 @@ app.get('/api/credits/export-full', async (req, res) => {
       throw err;
     });
 
-    archive.on('warning', (err) => {
-      console.warn('Archive warning:', err);
-    });
-
     // Set headers
     res.attachment('credits-with-images.zip');
-    headersSent = true;
 
     // Pipe archive data to response
     archive.pipe(res);
 
     // Add entire temp directory to zip
-    archive.directory(tempDir, false);
+    archive.directory(job.tempDir, false);
 
-    // Finalize archive
-    console.log('Finalizing archive');
+    // Finalize
     await archive.finalize();
-    
-    console.log(`Export complete: ${successfulDownloads}/${credits.length} successful`);
 
-    // Clean up temp directory after response is sent
-    res.on('finish', () => {
-      responseEnded = true;
-      cleanup();
-    });
-
+    // Clean up after sending
+    res.on('finish', () => cleanup(job.tempDir));
   } catch (error) {
-    console.error('Export error:', error);
-    await cleanup();
-    
-    if (!headersSent && !responseEnded) {
-      res.status(500).json({ 
-        message: 'Export failed', 
-        error: error.message,
-        details: error.stack
-      });
-    } else if (!responseEnded) {
-      res.end();
-    }
-  }
-
-  // Cleanup function
-  async function cleanup() {
-    try {
-      console.log('Starting cleanup');
-      
-      // Check if directories exist
-      try {
-        await access(imagesDir, fs.constants.F_OK);
-        // Read all files in images directory
-        const files = await readdir(imagesDir);
-        
-        // Delete each file
-        for (const file of files) {
-          const filePath = path.join(imagesDir, file);
-          console.log(`Deleting file: ${filePath}`);
-          await unlink(filePath);
-        }
-        
-        // Remove images directory
-        console.log(`Removing directory: ${imagesDir}`);
-        await rmdir(imagesDir);
-      } catch (err) {
-        console.log('Images directory already cleaned up or not found');
-      }
-      
-      // Remove temp directory
-      try {
-        await access(tempDir, fs.constants.F_OK);
-        console.log(`Removing directory: ${tempDir}`);
-        await rmdir(tempDir);
-      } catch (err) {
-        console.log('Temp directory already cleaned up or not found');
-      }
-      
-      console.log('Cleanup completed');
-    } catch (err) {
-      console.error('Cleanup error:', err);
-    }
+    console.error('Download error:', error);
+    res.status(500).json({ message: 'Download failed', error: error.message });
   }
 });
 
+// Process export in background
+async function processExport(jobId, credits) {
+  const job = exportJobs.get(jobId);
+  const tempDir = job.tempDir;
+  const imagesDir = path.join(tempDir, 'images');
+  
+  try {
+    // Create directories
+    await mkdir(tempDir, { recursive: true });
+    await mkdir(imagesDir, { recursive: true });
+
+    // Process in chunks
+    const chunkSize = 5;
+    const csvRows = [['Name', 'Image Path', 'Attribution']];
+    let processed = 0;
+
+    for (let i = 0; i < credits.length; i += chunkSize) {
+      const chunk = credits.slice(i, i + chunkSize);
+      
+      // Process chunk
+      await Promise.all(chunk.map(async (credit) => {
+        try {
+          // Download with retries
+          let imageData;
+          let attempts = 0;
+          const maxAttempts = 3;
+          let lastResponse;
+          
+          while (attempts < maxAttempts) {
+            try {
+              lastResponse = await axios({
+                method: 'get',
+                url: credit.url,
+                responseType: 'arraybuffer',
+                timeout: 30000,
+                maxContentLength: 50 * 1024 * 1024,
+                headers: {
+                  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+                }
+              });
+
+              if (lastResponse.status === 200 && lastResponse.data) {
+                imageData = lastResponse.data;
+                break;
+              }
+              throw new Error(`Invalid response: ${lastResponse.status}`);
+            } catch (err) {
+              attempts++;
+              if (attempts === maxAttempts) throw err;
+              await new Promise(resolve => setTimeout(resolve, 2000));
+            }
+          }
+
+          // Format filename
+          const formattedName = credit.artist.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+          
+          // Get extension
+          let ext = '.jpg';
+          if (lastResponse.headers['content-type'] && lastResponse.headers['content-type'].startsWith('image/')) {
+            ext = '.' + lastResponse.headers['content-type'].split('/')[1].split(';')[0].toLowerCase();
+          } else if (credit.url.match(/\.(jpg|jpeg|png|gif|webp)$/i)) {
+            ext = credit.url.match(/\.(jpg|jpeg|png|gif|webp)$/i)[0].toLowerCase();
+          }
+          
+          const imageName = `${formattedName}${ext}`;
+          const imagePath = path.join(imagesDir, imageName);
+
+          // Save image
+          await writeFile(imagePath, imageData);
+
+          csvRows.push([
+            credit.query,
+            `images/${imageName}`,
+            credit.attribution
+          ]);
+
+        } catch (error) {
+          console.error(`Failed to process ${credit.artist}:`, error.message);
+          csvRows.push([
+            credit.query,
+            `Error: ${error.message}`,
+            credit.attribution
+          ]);
+        }
+      }));
+
+      // Update progress
+      processed += chunk.length;
+      job.progress = Math.round((processed / credits.length) * 100);
+      job.status = 'processing';
+    }
+
+    // Save CSV
+    const csvContent = csvRows
+      .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+      .join('\n');
+    await writeFile(path.join(tempDir, 'credits.csv'), csvContent);
+
+    // Mark as completed
+    job.status = 'completed';
+    job.progress = 100;
+    
+  } catch (error) {
+    job.status = 'error';
+    job.error = error.message;
+    await cleanup(tempDir);
+  }
+}
+
+// Cleanup helper
+async function cleanup(dir) {
+  try {
+    const imagesDir = path.join(dir, 'images');
+    
+    try {
+      const files = await readdir(imagesDir);
+      for (const file of files) {
+        await unlink(path.join(imagesDir, file));
+      }
+      await rmdir(imagesDir);
+    } catch (err) {
+      console.log('Images directory already cleaned up');
+    }
+    
+    try {
+      await rmdir(dir);
+    } catch (err) {
+      console.log('Temp directory already cleaned up');
+    }
+  } catch (err) {
+    console.error('Cleanup error:', err);
+  }
+}
 // Export the app for Vercel
+module.exports = app;
